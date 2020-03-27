@@ -1,0 +1,134 @@
+---
+- name: Install packages
+  block:
+    - apt: update_cache=yes
+    - apt: name="openvpn" state=present
+    - apt: name="easy-rsa" state=present
+    - apt: name="dnsmasq" state=present
+  become: True
+  become_user: root
+
+# openvpn server
+- name: Create CA directory
+  command: make-cadir "{{ ansible_env.HOME + '/openvpn-ca' }}"
+
+- name: Create vars from template
+  template:
+    src: openvpn-configs/openvpn-ca-vars.j2
+    dest: "{{ ansible_env.HOME + '/openvpn-ca/vars' }}"
+    backup: yes
+
+- name: Make openvpn scripts non-interactive
+  shell: |
+    sed -i 's/--interact//g' build-ca
+    sed -i 's/--interact//g' build-key-server
+    sed -i 's/--interact//g' build-key
+  args:
+    chdir: "{{ ansible_env.HOME + '/openvpn-ca' }}"
+
+- name: Build CA
+  shell: |
+    . ./vars
+    ./clean-all
+    ./build-ca
+  args:
+    chdir: "{{ ansible_env.HOME + '/openvpn-ca' }}"
+
+- name: Generate - Server Certificate, Key, Encryption Files, Diffie-Hellman Keys, HMAC Signature
+  shell: |
+    . ./vars
+    ./build-key-server server
+    ./build-dh
+    openvpn --genkey --secret keys/ta.key
+  args:
+    chdir: "{{ ansible_env.HOME + '/openvpn-ca' }}"
+
+- name: Generate - Client Keys
+  shell: |
+    . ./vars
+    ./build-key client-keys
+  args:
+    chdir: "{{ ansible_env.HOME + '/openvpn-ca' }}"
+
+- block:
+  - name: Copy server keys to openvpn config dir
+    copy: src={{ item.src }} dest={{ item.dest }} remote_src=yes
+    with_items:
+      - { src: "{{ ansible_env.HOME + '/openvpn-ca/keys/ca.crt' }}", dest: '/etc/openvpn' }
+      - { src: "{{ ansible_env.HOME + '/openvpn-ca/keys/server.crt' }}", dest: '/etc/openvpn' }
+      - { src: "{{ ansible_env.HOME + '/openvpn-ca/keys/server.key' }}", dest: '/etc/openvpn' }
+      - { src: "{{ ansible_env.HOME + '/openvpn-ca/keys/ta.key' }}", dest: '/etc/openvpn' }
+      - { src: "{{ ansible_env.HOME + '/openvpn-ca/keys/dh2048.pem' }}", dest: '/etc/openvpn' }
+
+  - name: Create openvpn server.conf from template
+    template:
+      src: openvpn-configs/etc-openvpn-server-conf.j2
+      dest: /etc/openvpn/server.conf
+      backup: yes
+
+  - name: Update forwarding in sysctl.conf
+    sysctl:
+      name: net.ipv4.ip_forward
+      value: '1'
+      reload: yes
+
+  - name: Start openvpn, reload config
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: openvpn@server
+
+# dnsmasq
+  - name: Create dnsmasq.conf from template
+    template:
+      src: dnsmasq-configs/etc-dnsmasq-conf.j2
+      dest: /etc/dnsmasq.conf
+      backup: yes
+
+  - name: Create /etc/hosts from template
+    template:
+      src: dnsmasq-configs/etc-hosts.j2
+      dest: /etc/hosts
+      backup: yes
+
+  - name: Start dnsmasq, reload config
+    systemd:
+      state: restarted
+      daemon_reload: yes
+      name: dnsmasq
+
+  become: True
+  become_user: root
+
+# openvpn client
+- block:
+  - name: Create client config directory
+    file: path="{{ ansible_env.HOME + '/client-configs' }}" state=directory mode=0700
+
+  - name: Create client config files directory
+    file: path="{{ ansible_env.HOME + '/client-configs/files' }}" state=directory mode=0700
+
+  - name: Create client base config from template
+    template:
+      src: client-configs/base-conf.j2
+      dest: "{{ ansible_env.HOME + '/client-configs/base.conf' }}"
+      backup: yes
+
+  - name: Copy make_config.sh to host
+    copy:
+      src: client-configs/make_config.sh
+      dest: "{{ ansible_env.HOME + '/client-configs/make_config.sh' }}"
+      mode: 0755
+
+  - name: Generate - Client .ovpn file
+    shell: |
+      ./make_config.sh client-keys
+    args:
+      chdir: "{{ ansible_env.HOME + '/client-configs' }}"
+
+  - name: Fetch the client .ovpn file
+    fetch:
+      flat: yes
+      src: "{{ ansible_env.HOME + '/client-configs/files/client-keys.ovpn' }}"
+      dest: "./{{ vpn_domain }}.ovpn"
+...

@@ -1,0 +1,29 @@
+---
+- name: Provision Resources
+  hosts: localhost
+  vars:
+    # AWS-related variables
+    aws_ec2_provision: True
+    aws_ec2_keypair: minimal-openvpn-keypair
+    aws_ec2_instance_type: t2.micro
+    aws_ec2_image: ami-0b6f46ba4d94838a0
+    aws_ec2_region: eu-central-1
+    aws_ec2_security_group: minimal-openvpn-security-group
+  roles:
+    - provision
+
+- name: Pre-setup tasks
+  hosts: current_hosts
+  gather_facts: no
+  roles:
+    - pre-setup
+
+- name: Setup VPN Server
+  hosts: current_hosts
+  gather_facts: yes
+  vars:
+    vpn_domain: sandbox.test
+    vpn_host: www
+  roles:
+    - vpn_server
+...

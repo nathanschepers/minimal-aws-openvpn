@@ -1,0 +1,7 @@
+---
+- name: If required, provision AWS
+  import_tasks: aws.yml
+  when: aws_ec2_provision == True
+
+#- name: Assign domain name
+...

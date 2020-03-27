@@ -1,0 +1,17 @@
+
+client
+dev tun
+proto udp
+remote {{ inventory_hostname }} 1194
+resolv-retry infinite
+nobind
+user nobody
+group nogroup
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-128-CBC
+auth SHA256
+key-direction 1
+comp-lzo
+verb 3

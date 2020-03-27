@@ -1,0 +1,52 @@
+---
+- name: Provision new instance with EC2
+  # TODO: we need to set the instance name with something here
+  ec2:
+    keypair: '{{ aws_ec2_keypair }}'
+    instance_type: '{{ aws_ec2_instance_type }}'
+    image: '{{ aws_ec2_image }}'
+    region: '{{ aws_ec2_region }}'
+    group: '{{ aws_ec2_security_group }}'
+    wait: yes
+    count: 1
+  register: ec2
+
+- name: Set fact for instance name
+  # Note: we're only provisioning a single instance above (count: 1)
+  #       so it is safe to select only the first instance here
+  set_fact:
+    ec2_instance_id: "{{ ec2.instance_ids[0] }}"
+
+- name: Associate new Elastic IP
+  ec2_eip:
+    region: '{{ aws_ec2_region }}'
+    device_id: '{{ ec2_instance_id }}'
+  register: eip
+
+- name: Wait for SSH
+  wait_for:
+    host: "{{ eip.public_ip }}"
+    port: 22
+    delay: 60
+    timeout: 320
+    state: started
+
+- name: Add new instance to host group
+  add_host:
+    hostname: "{{ eip.public_ip }}"
+    groupname: current_hosts
+    ansible_ssh_user: ubuntu
+
+# - name: Release the Elastic IP
+#   ec2_eip:
+#     device_id: "{{ ec2_instance_id }}"
+#     region: '{{ aws_ec2_region }}'
+#     release_on_disassociation: yes
+#     state: absent
+#
+# - name: Terminate the instance
+#   ec2:
+#     instance_id: "{{ ec2_instance_id }}"
+#     region: '{{ aws_ec2_region }}'
+#     state: absent
+...
