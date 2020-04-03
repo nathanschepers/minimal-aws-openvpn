@@ -34,7 +34,7 @@ The provisioning phase will create a new EC2 instance, using the paramters speci
 
 Important to note here are the keypair and security group, mentioned above.
 
-Also of note here: the default ami is for Ubuntu 18.04LTS, as released by canonical. You can probably replace this wiath any debian-based ami, but be careful that the ami you choose will work in the specified EC2 region and will run on the specified instance type.
+Also of note here: the default ami is for Ubuntu 18.04LTS, as released by canonical. You can probably replace this with any debian-based ami, but be careful that the ami you choose will work in the specified EC2 region and will run on the specified instance type.
 
 ### Pre-Setup
 
